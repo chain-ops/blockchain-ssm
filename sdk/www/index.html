@@ -96,7 +96,7 @@ function ssmPerformSetup() {
 <center><h1>Signing State Machines</h1></center>
 
 <h2>Host gateway</h2>
-Host address <input type="text" size="12" value="127.0.0.1" id="host__Fld">:<input type="text" size="6" value="8080" id="port__Fld">
+Host address <input type="text" size="12" value="ca.pr-bc1.chain-ops.net" id="host__Fld">:<input type="text" size="6" value="8001" id="port__Fld">
 
 <table>
 <tr>
@@ -111,12 +111,12 @@ Host address <input type="text" size="12" value="127.0.0.1" id="host__Fld">:<inp
 <td>
 <input type="button" value="query" onclick="ssmQuerySetup()"/>
 <select id="query__Sel">
-  <option value="admin" selected>Admin</option>
+  <option value="admin">Admin</option>
   <option value="user">User</option>
   <option value="ssm">SSM</option>
-  <option value="session">Session</option>
+  <option value="session" selected>Session</option>
 </select>
-<input type="text" size="12" id="query__Fld"/>
+<input type="text" size="12" id="query__Fld" value="carsale20190301"/>
 <br>
 <b>Signer agent: </b><input type="text" size="12" id="agent__Fld">
 <br>
