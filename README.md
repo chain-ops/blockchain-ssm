@@ -251,4 +251,26 @@ Result
   Returns corresponding Agent structure.
 ```
 
+  * **list:** List all Sessions, SigningStateMachines, Users or Admins 
 
+```
+Query
+-------
+  "list", <session|ssm|user|admin> 
+
+Result
+------
+  Returns the list of corresponding identifiers.
+```
+
+  * **log:** Log a session history
+
+```
+Query
+-------
+  "log", <session id> 
+
+Result
+------
+  Returns the successive session states with the corresponding transaction ids.
+```

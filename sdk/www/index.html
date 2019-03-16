@@ -1,7 +1,13 @@
 <html>
+
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Signing State Machines</title>
 </head>
+
+
+<link rel="stylesheet" type="text/css" href="mdl/material.min.css">
+<script src="mdl/material.min.js"></script>
 
 <script src="crypto-js/crypto-js.js"></script>
 <script src="jsencrypt/jsencrypt.js"></script>
@@ -12,156 +18,586 @@
 <script src="ssm-view.js"></script>
 <script type="text/javascript">
 
+var viewElements = {
+	"access": ['access_host__Fld', 'access_port__Fld', 'access_id__Fld', 'access_prv__Fld', 'data__Fld'],
+	"user": ['user_id__Fld', 'user_pub__Fld', 'user_prv__Fld', 'user_list__Tbl', 'data__Fld'],
+	"session": ['session_id__Fld', 'session_action__Fld', 'session_data__Fld', 'session_list__Tbl', 'session_log__Tbl', 'data__Fld'],
+	"ssm": ['ssm_id__Fld', 'ssm_data__Fld', 'ssm_list__Tbl', 'ssm_graph__Cnv', 'data__Fld']
+}
+
+function argsFromQueryString(queryString) {
+	var args = {};
+	if (!queryString)
+		return args;
+	var getVars = decodeURI(queryString).split("\&");
+	for (var i=0; i<getVars.length; i++) {
+		var varVal = getVars[i].split("\=");
+		if (varVal.length == 2)
+			args[varVal[0]] = varVal[1];
+	}
+	return args;
+}
+
+function logError(result) {
+	console.log(result)
+	document.getElementById('data__Fld').value = "Error: " + result;
+}
+
 function logResult(result) {
+	console.log(result)
 	document.getElementById('data__Fld').value = JSON.stringify(JSON.parse(result),null,2);
 }
 
+function clearView(elements) {
+	elements.map(function(id) {
+		document.getElementById(id).value = "";
+	});
+}
+
 function logSSM(result) {
-	logResult(result);
 	var ssm = JSON.parse(result);
-	var cnv = document.getElementById('ssm__Cnv');
+	var cnv = document.getElementById('ssm_graph__Cnv');
 	ssmView(ssm, cnv);
+	document.getElementById('ssm_data__Fld').value = JSON.stringify(ssm,null,2);
 }
 
-function logSignature() {
-	var txt = document.getElementById('txt__Fld').value;
-	var prv = document.getElementById('prv__Fld').value;
-	JSE.setPrivateKey(prv);
-	var sgn = JSE.sign(txt, CryptoJS.SHA256, "sha256");
-	document.getElementById('data__Fld').value = sgn;
+function listSSM(result) {
+	document.getElementById('ssm_list__Tbl').value = JSON.stringify(JSON.parse(result),null,2);
 }
 
-function logFlatPublicKey() {
-	var pub = document.getElementById('pub__Fld').value;
-	document.getElementById('data__Fld').value = flattenPublicKey(pub);
+function logSession(result) {
+	document.getElementById('session_data__Fld').value = JSON.stringify(JSON.parse(result),null,2);
 }
 
-function logPublicKey() {
-	var prv = document.getElementById('prv__Fld').value;
-	JSE.setPrivateKey(prv);
-	var pub = JSE.getPublicKey();
-	document.getElementById('pub__Fld').value = pub;
+function listSession(result) {
+	document.getElementById('session_list__Tbl').value = JSON.stringify(JSON.parse(result),null,2);
 }
 
-function genPrivateKey() {
-	var prv = JSE.getPrivateKey(prv);
-	document.getElementById('prv__Fld').value = prv;
+function listSessionLog(result) {
+	document.getElementById('session_log__Tbl').value = JSON.stringify(JSON.parse(result),null,2);
 }
 
-function ssmQuerySetup() {
-	var uri = "http://" + document.getElementById('host__Fld').value + ":" + document.getElementById('port__Fld').value;
-	var fcn = document.getElementById('query__Sel').value;
-	var queryId = document.getElementById('query__Fld').value;
+function logUser(result) {
+	var usr = JSON.parse(result);
+	document.getElementById('user_id__Fld').value = usr.name;
+	document.getElementById('user_pub__Fld').value = usr.pub;
+}
+
+function listUser(result) {
+	document.getElementById('user_list__Tbl').value = JSON.stringify(JSON.parse(result),null,2);
+}
+
+function usrGenerateKeyPair() {
+	JSE.key = null;
+	document.getElementById('user_prv__Fld').value = JSE.getPrivateKey();
+	document.getElementById('user_pub__Fld').value = JSE.getPublicKey();
+}
+
+function ssmQuerySetup(keyType, onOk, onError) {
+	var keyId = document.getElementById((keyType == 'admin' ? 'user' : keyType) + '_id__Fld').value;
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var hostCmd = ssmQuery(keyType, keyId);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, onOk ? onOk : logResult , onError ? onError : logError);
+	return cbctx;
+}
+
+function ssmListSetup(keyType, onOk, onError) {
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var hostCmd = ssmQuery("list", keyType);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, onOk ? onOk : logResult , onError ? onError : logError);
+	return cbctx;
+}
+
+function ssmLogSetup() {
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var fcn = "log";
+	var queryId = document.getElementById('session_id__Fld').value;
 	var hostCmd = ssmQuery(fcn, queryId);
-	bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logSSM, logResult);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, listSessionLog, logError);
+	return cbctx;
 }
 
 function ssmRegisterSetup() {
-	var uri = "http://" + document.getElementById('host__Fld').value + ":" + document.getElementById('port__Fld').value;
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
 	var user = {
-		name: document.getElementById('user__Fld').value,
-		pub: flattenPublicKey(document.getElementById('pub__Fld').value)
+		name: document.getElementById('user_id__Fld').value,
+		pub: flattenPublicKey(document.getElementById('user_pub__Fld').value)
 	}
-	document.getElementById('data__Fld').value = JSON.stringify(user,null,2);
-	var admin = document.getElementById('agent__Fld').value;
-	var adminKey = document.getElementById('prv__Fld').value;
+	var admin = document.getElementById('access_id__Fld').value;
+	var adminKey = document.getElementById('access_prv__Fld').value;
 	var hostCmd = ssmRegister(user, admin, adminKey);
-	bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logResult);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logError);
+	return cbctx;
 }
 
 function ssmCreateSetup() {
-	var uri = "http://" + document.getElementById('host__Fld').value + ":" + document.getElementById('port__Fld').value;
-	var ssm = JSON.parse(document.getElementById('data__Fld').value);
-	var admin = document.getElementById('agent__Fld').value;
-	var adminKey = document.getElementById('prv__Fld').value;
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var ssm = JSON.parse(document.getElementById('ssm_data__Fld').value);
+	var admin = document.getElementById('access_id__Fld').value;
+	var adminKey = document.getElementById('access_prv__Fld').value;
 	var hostCmd = ssmCreate(ssm, admin, adminKey);
-	bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logResult);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logError);
+	return cbctx;
 }
 
 function ssmStartSetup() {
-	var uri = "http://" + document.getElementById('host__Fld').value + ":" + document.getElementById('port__Fld').value;
-	var session = JSON.parse(document.getElementById('data__Fld').value);
-	var admin = document.getElementById('agent__Fld').value;
-	var adminKey = document.getElementById('prv__Fld').value;
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var session = JSON.parse(document.getElementById('session_data__Fld').value);
+	var admin = document.getElementById('access_id__Fld').value;
+	var adminKey = document.getElementById('access_prv__Fld').value;
 	var hostCmd = ssmStart(session, admin, adminKey);
-	bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logResult);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logError);
+	return cbctx;
 }
 
 function ssmPerformSetup() {
-	var uri = "http://" + document.getElementById('host__Fld').value + ":" + document.getElementById('port__Fld').value;
-	var context = JSON.parse(document.getElementById('data__Fld').value);
-	var action = document.getElementById('action__Fld').value;
-	var user = document.getElementById('agent__Fld').value;
-	var userKey = document.getElementById('prv__Fld').value;
+	var uri = "http://" + document.getElementById('access_host__Fld').value + ":" + document.getElementById('access_port__Fld').value;
+	var context = JSON.parse(document.getElementById('session_data__Fld').value);
+	var action = document.getElementById('session_action__Fld').value;
+	var user = document.getElementById('access_id__Fld').value;
+	var userKey = document.getElementById('access_prv__Fld').value;
 	var hostCmd = ssmPerform(action, context, user, userKey);
-	bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logResult);
+	var cbctx = bccHostCmd(uri, hostCmd.cmd, hostCmd.fcn, hostCmd.args, logResult, logError);
+	return cbctx;
 }
 
+function initView() {
+	var args = argsFromQueryString(window.location.toString().split("\?")[1]);
+	if (args.host)
+		document.getElementById('access_host__Fld').value = args.host;
+	if (args.port)
+		document.getElementById('access_port__Fld').value = args.port;
+}
 
 </script>
 
-<body>
 
-<center><h1>Signing State Machines</h1></center>
 
-<h2>Host gateway</h2>
-Host address <input type="text" size="12" value="ca.pr-bc1.chain-ops.net" id="host__Fld">:<input type="text" size="6" value="8001" id="port__Fld">
+<body onload="initView()">
 
-<table>
-<tr>
-<td>
-<h2>Private key</h2>
-<textarea rows="28" cols="64" id="prv__Fld">
-</textarea>
-<br>
-<input type="button" value="generate" onclick="genPrivateKey()"/>
-<input type="button" value="public" onclick="logPublicKey()"/>
-</td>
-<td>
-<input type="button" value="query" onclick="ssmQuerySetup()"/>
-<select id="query__Sel">
-  <option value="admin">Admin</option>
-  <option value="user">User</option>
-  <option value="ssm">SSM</option>
-  <option value="session" selected>Session</option>
-</select>
-<input type="text" size="12" id="query__Fld" value="carsale20190301"/>
-<br>
-<b>Signer agent: </b><input type="text" size="12" id="agent__Fld">
-<br>
-<input type="button" value="register" onclick="ssmRegisterSetup()"/> user: <input type="text" size="12" id="user__Fld"/>
-<br>
-<input type="button" value="perform" onclick="ssmPerformSetup()"/> action: <input type="text" size="12" id="action__Fld"/>
-<br>
-<input type="button" value="create SSM" onclick="ssmCreateSetup()"/>
-<input type="button" value="start session" onclick="ssmStartSetup()"/>
-<h3>Data</h3>
-<textarea rows="16" cols="32" id="data__Fld">
-</textarea>
-<br>
-</td>
+<div class="mdl-layout mdl-js-layout mdl-layout--fixed-header">
 
-<td id="ssm__Cnv" rowspan="2" style="width:100%;height:100%">
-</td>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Header -->
+<header class="mdl-layout__header">
+  <div class="mdl-layout__header-row">
+    <span class="mdl-layout-title">
+		<a href="https://github.com/civis-blockchain/blockchain-ssm">Signing State Machines</a>
+	</span>
+  </div>
+  <div class="mdl-layout__tab-bar mdl-js-ripple-effect">
+    <a href="#data__View" class="mdl-layout__tab">&nbsp;</a>
+    <a href="#access__View" class="mdl-layout__tab">Access</a>
+    <a href="#user__View" class="mdl-layout__tab">User</a>
+    <a href="#session__View" class="mdl-layout__tab">Session</a>
+    <a href="#ssm__View" class="mdl-layout__tab">State Machine</a>
+  </div>
+</header>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
 
-</tr>
-<tr>
-<td colspan="2">
-<h2>Public key</h2>
-<textarea rows="8" cols="64" id="pub__Fld">
-</textarea>
-<br>
-<input type="button" value="flatten" onclick="logFlatPublicKey()"/>
 
-<h2>Text to sign</h2>
-<textarea rows="4" cols="64" id="txt__Fld">
-</textarea>
-<br>
-<input type="button" value="sign" onclick="logSignature()"/>
-</td>
 
-</tr>
-</table>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Content -->
+<main class="mdl-layout__content">
+
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Data Tab View -->
+<section class="mdl-layout__tab-panel" id="data__View">
+<div class="page-content">
+</div>
+</section>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Access Tab View -->
+<section class="mdl-layout__tab-panel" id="access__View">
+<div class="page-content">
+
+<div class="mdl-grid">
+
+<!-- Host address / Port -->
+<div class="mdl-cell mdl-cell--3-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="access_host__TxtFld">
+      <input class="mdl-textfield__input" type="text" value="127.0.0.1" id="access_host__Fld">
+      <label class="mdl-textfield__label" for="access_host__TxtFld">Host addess</label>
+  </div>
+</div>
+<div class="mdl-cell mdl-cell--1-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="access_port__TxtFld">
+      <input class="mdl-textfield__input" type="text" value="8080" id="access_port__Fld">
+      <label class="mdl-textfield__label" for="access_port__TxtFld">Port</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--8-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<!-- User access id -->
+<div class="mdl-cell mdl-cell--4-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="access_id__TxtFld">
+      <input class="mdl-textfield__input" type="text" id="access_id__Fld">
+      <label class="mdl-textfield__label" for="access_id__TxtFld">User</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--8-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<!-- Private key -->
+<div class="mdl-cell mdl-cell--4-col">
+Private key
+</div>
+
+<div class="mdl-cell mdl-cell--8-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<div class="mdl-cell mdl-cell--8-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="access_prv__TxtFld">
+<textarea rows="28" cols="64" class="mdl-textfield__input" style="font-family:monospace" id="access_prv__Fld"></textarea>
+</div>
+</div>
+
+<!-- Clear button -->
+<div class="mdl-cell mdl-cell--4-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="clearView(viewElements['access'])">
+Clear view
+</button>
+</div>
+
+</div>
+</div>
+</section>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- User Tab View -->
+<section class="mdl-layout__tab-panel" id="user__View">
+<div class="page-content">
+
+<div class="mdl-grid">
+
+
+<!-- ---- ---- ---- ---- User / Admin query box -->
+<div class="mdl-cell mdl-cell--8-col mdl-cell--4-col-phone mdl-grid">
+
+<!-- User query id / buttons -->
+<div class="mdl-cell mdl-cell--4-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="user_id__TxtFld">
+      <input class="mdl-textfield__input" type="text" id="user_id__Fld">
+      <label class="mdl-textfield__label" for="user_id__TxtFld">User</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmQuerySetup('user',logUser)">
+query user
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmQuerySetup('admin',logUser)">
+query admin
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col mdl-layout-spacer">
+</div>
+<!-- Clear button -->
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="clearView(viewElements['user'])">
+Clear view
+</button>
+</div>
+
+
+<!-- Public key / register button -->
+<div class="mdl-cell mdl-cell--10-col mdl-cell--2-col-phone">
+Public key
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmRegisterSetup()">
+register user
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="user_pub__TxtFld">
+<textarea rows="8" cols="64" class="mdl-textfield__input" style="font-family:monospace" id="user_pub__Fld"></textarea>
+</div>
+</div>
+
+<!-- Private key / generate button -->
+<div class="mdl-cell mdl-cell--10-col mdl-cell--2-col-phone">
+Private key
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="usrGenerateKeyPair()">
+generate key pair
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="user_prv__TxtFld">
+<textarea rows="28" cols="64" class="mdl-textfield__input" style="font-family:monospace" id="user_prv__Fld"></textarea>
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+
+<!-- ---- ---- ---- ---- User / Admin list box -->
+<div class="mdl-cell mdl-cell--4-col mdl-grid">
+
+<!-- User list buttons -->
+<div class="mdl-cell mdl-cell--6-col mdl-cell--4-col-phone">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmListSetup('user',listUser)">
+list users
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--6-col mdl-cell--4-col-phone">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmListSetup('admin',listUser)">
+list admins
+</button>
+</div>
+
+<!-- Users / Admins list -->
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="user_list__TxtTbl">
+<textarea class="mdl-textfield__input" style="font-family:monospace"  rows="48" cols="32" id="user_list__Tbl"></textarea>
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+</div>
+</div>
+</section>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Session Tab View -->
+<section class="mdl-layout__tab-panel" id="session__View">
+<div class="page-content">
+
+<div class="mdl-grid">
+
+<!-- ---- ---- ---- ---- Session query / action box -->
+<div class="mdl-cell mdl-cell--8-col mdl-cell--4-col-phone mdl-grid">
+
+<!-- Session query / start buttons -->
+<div class="mdl-cell mdl-cell--4-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="session_id__TxtFld">
+      <input class="mdl-textfield__input" type="text" id="session_id__Fld">
+      <label class="mdl-textfield__label" for="session_id__TxtFld">Session</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmQuerySetup('session',logSession)">
+query session
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmStartSetup()">
+start session
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col mdl-layout-spacer">
+</div>
+
+<!-- Clear button -->
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="clearView(viewElements['session'])">
+Clear view
+</button>
+</div>
+
+<!-- Action field / perform button -->
+<div class="mdl-cell mdl-cell--4-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="session_action__TxtFld">
+      <input class="mdl-textfield__input" type="text" id="session_action__Fld">
+      <label class="mdl-textfield__label" for="session_action__TxtFld">Action</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmPerformSetup()">
+perform action
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--6-col mdl-cell--2-col-phone mdl-layout-spacer">
+</div>
+
+<!-- Session field -->
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="session_data__TxtFld">
+<textarea rows="24" cols="64" class="mdl-textfield__input" style="font-family:monospace" id="session_data__Fld"></textarea>
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+<!-- ---- ---- ---- ---- Session list / log box -->
+<div class="mdl-cell mdl-cell--4-col mdl-grid">
+
+<!-- Session list button / box -->
+<div class="mdl-cell mdl-cell--6-col mdl-cell--4-col-phone">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmListSetup('session',listSession)">
+list sessions
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--6-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="session_list__TxtTbl">
+<textarea class="mdl-textfield__input" style="font-family:monospace"  rows="16" cols="32" id="session_list__Tbl"></textarea>
+</div>
+</div>
+
+<!-- Session log button / box -->
+<div class="mdl-cell mdl-cell--6-col mdl-cell--4-col-phone">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmLogSetup()">
+log session
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--6-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="session_log__TxtTbl">
+<textarea class="mdl-textfield__input" style="font-family:monospace"  rows="16" cols="32" id="session_log__Tbl"></textarea>
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+</div>
+</div>
+</section>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- State Machine Tab View -->
+<section class="mdl-layout__tab-panel" id="ssm__View">
+<div class="page-content">
+
+<div class="mdl-grid">
+
+<!-- ---- ---- ---- ---- State Machine query / create box -->
+<div class="mdl-cell mdl-cell--8-col mdl-cell--4-col-phone mdl-grid">
+
+<!-- State Machine query / create buttons -->
+<div class="mdl-cell mdl-cell--4-col">
+  <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="ssm_id__TxtFld">
+      <input class="mdl-textfield__input" type="text" id="ssm_id__Fld">
+      <label class="mdl-textfield__label" for="session_id__TxtFld">State Machine</label>
+  </div>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmQuerySetup('ssm',logSSM)">
+query SSM
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmCreateSetup()">
+create SSM
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--2-col mdl-layout-spacer">
+</div>
+
+<!-- Clear button -->
+<div class="mdl-cell mdl-cell--2-col">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="clearView(viewElements['ssm']);document.getElementById('ssm_graph__Cnv').innerHTML=''">
+Clear view
+</button>
+</div>
+
+<!-- State Machine field -->
+<div class="mdl-cell mdl-cell--4-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="ssm_data__TxtFld">
+<textarea rows="24" cols="32" class="mdl-textfield__input" style="font-family:monospace" id="ssm_data__Fld"></textarea>
+</div>
+</div>
+
+<!-- State Machine graph canvas -->
+<div class="mdl-cell mdl-cell--8-col mdl-cell--4-col-phone">
+<div style="min-width:240px;min-height:320px;max-height:480px" id="ssm_graph__Cnv">
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+
+<!-- ---- ---- ---- ---- State Machines list box -->
+<div class="mdl-cell mdl-cell--4-col mdl-grid">
+	
+<!-- State Machines list button -->
+<div class="mdl-cell mdl-cell--6-col mdl-cell--4-col-phone">
+<button type="button" class="mdl-button mdl-js-button mdl-button--raised" onclick="ssmListSetup('ssm',listSSM)">
+list state machines
+</button>
+</div>
+
+<div class="mdl-cell mdl-cell--6-col mdl-cell--hide-phone mdl-layout-spacer">
+</div>
+
+<!-- State Machines list -->
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone">
+<div style="width:95%" class="mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast" id="ssm_list__TxtTbl">
+<textarea class="mdl-textfield__input" style="font-family:monospace"  rows="32" cols="32" id="ssm_list__Tbl"></textarea>
+</div>
+</div>
+
+</div>
+<!-- ---- ---- ---- ------>
+
+</div>
+</div>
+</section>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- Data result / error footer-->
+
+<div class="mdl-grid">
+<div class="mdl-cell mdl-cell--12-col mdl-cell--4-col-phone mdl-textfield mdl-js-textfield mdl-color--primary mdl-color-text--primary-contrast"  id="data__TxtFld">
+<input class="mdl-textfield__input" type="text" style="font-family:monospace" id="data__Fld" readonly>
+</div>
+</div>
+
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+</main>
+<!-- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ------>
+
+
+
+</div>
+
+
 
 </body>
 </html>
